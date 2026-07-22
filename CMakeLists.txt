@@ -82,6 +82,7 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/extern/argtable3-3.0.3)
 add_subdirectory(wmis)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/app)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/extern/argtable3-3.0.3)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/extern/KaHIP)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/extern/KaHIP/interface)
@@ -131,7 +132,12 @@ lib/mis/kernel/ParFastKer/fast_reductions/src/parallel_reductions.cpp
 lib/mis/kernel/ParFastKer/LinearTime/MIS_sigmod_pub/Graph.cpp
 lib/mis/kernel/ParFastKer/LinearTime/MIS_sigmod_pub/Utility.cpp
 extern/argtable3-3.0.3/argtable3.c)
-add_library(libfiles OBJECT ${LIBSOURCE_SOURCE_FILES})
+
+set(LIBONLINEMIS_FILES
+lib/mis/ils/online_ils.cpp
+lib/mis/ils/local_search_online.cpp
+lib/mis/initial_mis/greedy_mis_online.cpp
+lib/data_structure/mis_permutation_online.cpp)
 
 set(LIBKAFFPA_SOURCE_FILES
 extern/KaHIP/lib/data_structure/graph_hierarchy.cpp
@@ -191,31 +197,68 @@ extern/KaHIP/lib/algorithms/cycle_search.cpp
 extern/KaHIP/lib/partition/uncoarsening/refinement/cycle_improvements/cycle_refinement.cpp
 extern/KaHIP/lib/partition/uncoarsening/refinement/tabu_search/tabu_search.cpp
 extern/KaHIP/interface/kaHIP_interface.cpp)
-add_library(libkaffpa OBJECT ${LIBKAFFPA_SOURCE_FILES})
 
+# =========================================================================
+# Shared libraries
+# =========================================================================
 
-set(LIBONLINEMIS_FILES
-lib/mis/ils/online_ils.cpp
-lib/mis/ils/local_search_online.cpp
-lib/mis/initial_mis/greedy_mis_online.cpp
-lib/data_structure/mis_permutation_online.cpp)
-add_library(libonlinemis OBJECT ${LIBONLINEMIS_FILES})
+# ---- libkahip — KaHIP graph partitioning library ----
+add_library(kahip SHARED ${LIBKAFFPA_SOURCE_FILES})
+set_target_properties(kahip PROPERTIES
+    SOVERSION 0
+    VERSION 0.1.0
+    OUTPUT_NAME kahip
+)
+target_link_libraries(kahip PRIVATE ${OpenMP_CXX_LIBRARIES})
 
-add_executable(redumis app/reduction_evomis.cpp $<TARGET_OBJECTS:libkaffpa> $<TARGET_OBJECTS:libfiles>)
-target_link_libraries(redumis ${OpenMP_CXX_LIBRARIES})
-install(TARGETS redumis DESTINATION bin)
+# ---- libkamis — KaMIS maximum independent set library ----
+add_library(kamis SHARED
+    ${LIBSOURCE_SOURCE_FILES}
+    ${LIBONLINEMIS_FILES}
+    lib/kamis_api.cpp
+)
+set_target_properties(kamis PROPERTIES
+    SOVERSION 0
+    VERSION 0.1.0
+    OUTPUT_NAME kamis
+)
+target_link_libraries(kamis PUBLIC kahip ${OpenMP_CXX_LIBRARIES})
 
-add_executable(graphchecker app/graphchecker.cpp $<TARGET_OBJECTS:libkaffpa> $<TARGET_OBJECTS:libfiles>)
-target_link_libraries(graphchecker ${OpenMP_CXX_LIBRARIES})
-install(TARGETS graphchecker DESTINATION bin)
+# ---- Install rules ----
+include(GNUInstallDirs)
+install(TARGETS kahip kamis
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+)
+install(FILES include/kamis.h
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+install(FILES extern/KaHIP/interface/kaHIP_interface.h
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
 
-add_executable(sort_adjacencies app/sort_adjacencies.cpp $<TARGET_OBJECTS:libkaffpa> $<TARGET_OBJECTS:libfiles>)
-target_link_libraries(sort_adjacencies ${OpenMP_CXX_LIBRARIES})
-install(TARGETS sort_adjacencies DESTINATION bin)
+# =========================================================================
+# Command-line executables (optional)
+# =========================================================================
 
-add_executable(online_mis app/online_mis.cpp $<TARGET_OBJECTS:libkaffpa> $<TARGET_OBJECTS:libfiles> $<TARGET_OBJECTS:libonlinemis>)
-target_compile_definitions(online_mis PRIVATE "-DOMIS")
-target_link_libraries(online_mis ${OpenMP_CXX_LIBRARIES})
-install(TARGETS online_mis DESTINATION bin)
+option(KAMIS_BUILD_EXECUTABLES "Build command-line executables" ON)
+
+if(KAMIS_BUILD_EXECUTABLES)
+    add_executable(redumis app/reduction_evomis.cpp)
+    target_link_libraries(redumis kamis kahip ${OpenMP_CXX_LIBRARIES})
+    install(TARGETS redumis RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+    add_executable(graphchecker app/graphchecker.cpp)
+    target_link_libraries(graphchecker kamis kahip ${OpenMP_CXX_LIBRARIES})
+    install(TARGETS graphchecker RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+    add_executable(sort_adjacencies app/sort_adjacencies.cpp)
+    target_link_libraries(sort_adjacencies kamis kahip ${OpenMP_CXX_LIBRARIES})
+    install(TARGETS sort_adjacencies RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+    add_executable(online_mis app/online_mis.cpp)
+    target_compile_definitions(online_mis PRIVATE "-DOMIS")
+    target_link_libraries(online_mis kamis kahip ${OpenMP_CXX_LIBRARIES})
+    install(TARGETS online_mis RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif()
 
 
