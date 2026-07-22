@@ -208,6 +208,8 @@ set_target_properties(kahip PROPERTIES
     SOVERSION 0
     VERSION 0.1.0
     OUTPUT_NAME kahip
+    INSTALL_RPATH "$ORIGIN"
+    BUILD_RPATH "$ORIGIN"
 )
 target_link_libraries(kahip PRIVATE ${OpenMP_CXX_LIBRARIES})
 
@@ -221,6 +223,8 @@ set_target_properties(kamis PROPERTIES
     SOVERSION 0
     VERSION 0.1.0
     OUTPUT_NAME kamis
+    INSTALL_RPATH "$ORIGIN"
+    BUILD_RPATH "$ORIGIN"
 )
 target_link_libraries(kamis PUBLIC kahip ${OpenMP_CXX_LIBRARIES})
 
